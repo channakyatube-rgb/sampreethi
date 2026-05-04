@@ -71,7 +71,9 @@ export const isGallerySupabaseConfigured = Boolean(supabase);
 
 const getSupabase = () => {
   if (!supabase) {
-    throw new Error("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local.");
+    throw new Error(
+      "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment (.env.local for local, Netlify Environment Variables for production).",
+    );
   }
   return supabase;
 };

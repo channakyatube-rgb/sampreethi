@@ -79,7 +79,7 @@ export const CATALOGUE_CATEGORIES: CatalogueCategory[] = [
 ];
 
 export const SUPABASE_CONFIG_ERROR =
-  "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local.";
+  "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment (.env.local for local, Netlify Environment Variables for production).";
 const ADMIN_ROW_MISSING_ERROR =
   "Admin access is not enabled for this account in Supabase. Add this user ID to public.admin_users and sign in again:";
 const ADMIN_SESSION_MISSING_ERROR = "Admin session expired. Please sign in again.";

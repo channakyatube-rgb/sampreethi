@@ -1,5 +1,22 @@
 import { google } from "googleapis";
 
+const normalizePrivateKey = (rawKey: string) => {
+  let privateKey = rawKey.trim();
+
+  // Netlify env pastes can sometimes include wrapping quotes.
+  if (
+    (privateKey.startsWith("\"") && privateKey.endsWith("\"")) ||
+    (privateKey.startsWith("'") && privateKey.endsWith("'"))
+  ) {
+    privateKey = privateKey.slice(1, -1);
+  }
+
+  // Support keys stored with literal \n sequences.
+  privateKey = privateKey.replace(/\\n/g, "\n");
+
+  return privateKey;
+};
+
 export const handler = async (event: { httpMethod: string; body: string }) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -25,11 +42,24 @@ export const handler = async (event: { httpMethod: string; body: string }) => {
 
     const parsedBody = JSON.parse(event.body || "{}");
     const category = String(parsedBody.category || "").trim();
+    const clientEmail = String(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "").trim();
+    const privateKey = normalizePrivateKey(String(process.env.GOOGLE_PRIVATE_KEY || ""));
+
+    if (!privateKey.includes("BEGIN PRIVATE KEY") || !privateKey.includes("END PRIVATE KEY")) {
+      return {
+        statusCode: 500,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error:
+            "GOOGLE_PRIVATE_KEY format is invalid. Paste the full private key including BEGIN/END lines.",
+        }),
+      };
+    }
 
     const auth = new google.auth.GoogleAuth({
       credentials: {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        client_email: clientEmail,
+        private_key: privateKey,
       },
       scopes: ["https://www.googleapis.com/auth/drive"],
     });
@@ -40,9 +70,31 @@ export const handler = async (event: { httpMethod: string; body: string }) => {
     // Map category name to its Drive folder ID
     // GOOGLE_DRIVE_FOLDER_IDS should be a JSON string like:
     // {"Plywood Sheets":"folderID1","Doors":"folderID2",...}
-    const folderIds: Record<string, string> = JSON.parse(
-      process.env.GOOGLE_DRIVE_FOLDER_IDS || "{}"
-    );
+    let folderIds: Record<string, string> = {};
+    const folderIdsRaw = String(process.env.GOOGLE_DRIVE_FOLDER_IDS || "").trim();
+    if (folderIdsRaw.length > 0) {
+      try {
+        const parsed = JSON.parse(folderIdsRaw);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          return {
+            statusCode: 500,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              error: "GOOGLE_DRIVE_FOLDER_IDS must be a JSON object, for example: {\"Plywood Sheets\":\"<folderId>\"}",
+            }),
+          };
+        }
+        folderIds = parsed as Record<string, string>;
+      } catch {
+        return {
+          statusCode: 500,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            error: "GOOGLE_DRIVE_FOLDER_IDS is invalid JSON. Use a one-line JSON object.",
+          }),
+        };
+      }
+    }
 
     const folderId = folderIds[category] || process.env.GOOGLE_DRIVE_ROOT_FOLDER!;
 
@@ -74,7 +126,9 @@ export const handler = async (event: { httpMethod: string; body: string }) => {
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Failed to get Drive token" }),
+      body: JSON.stringify({
+        error: `Failed to get Drive token: ${err instanceof Error ? err.message : String(err)}`,
+      }),
     };
   }
 };

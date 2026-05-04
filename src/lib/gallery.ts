@@ -199,6 +199,17 @@ const uploadToR2 = async (file: File, category: string): Promise<string> => {
 };
 
 const uploadToDrive = async (file: File, category: string): Promise<string> => {
+  const readErrorMessage = async (response: Response) => {
+    const text = await response.text();
+    if (!text) return response.statusText || "Unknown Google Drive error";
+    try {
+      const parsed = JSON.parse(text) as { error?: { message?: string } };
+      return parsed.error?.message || text;
+    } catch {
+      return text;
+    }
+  };
+
   const tokenRes = await fetch("/.netlify/functions/get-drive-token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -215,7 +226,7 @@ const uploadToDrive = async (file: File, category: string): Promise<string> => {
 
   const { token, folderId } = await tokenRes.json();
 
-  const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+  const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -229,7 +240,10 @@ const uploadToDrive = async (file: File, category: string): Promise<string> => {
     }),
   });
 
-  if (!initRes.ok) throw new Error("Drive session init failed");
+  if (!initRes.ok) {
+    const detail = await readErrorMessage(initRes);
+    throw new Error(`Drive session init failed (${initRes.status}): ${detail}`);
+  }
   const resumableUrl = initRes.headers.get("Location");
   if (!resumableUrl) throw new Error("No resumable URL from Drive");
 
@@ -239,7 +253,10 @@ const uploadToDrive = async (file: File, category: string): Promise<string> => {
     body: file,
   });
 
-  if (!uploadRes.ok) throw new Error("Drive upload failed");
+  if (!uploadRes.ok) {
+    const detail = await readErrorMessage(uploadRes);
+    throw new Error(`Drive upload failed (${uploadRes.status}): ${detail}`);
+  }
   const driveFile = await uploadRes.json();
 
   const pubRes = await fetch("/.netlify/functions/make-drive-file-public", {

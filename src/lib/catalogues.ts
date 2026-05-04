@@ -242,6 +242,17 @@ const uploadFileToR2 = async (file: File, category: string): Promise<string> => 
 };
 
 const uploadFileToDrive = async (file: File, category: string): Promise<string> => {
+  const readErrorMessage = async (response: Response) => {
+    const text = await response.text();
+    if (!text) return response.statusText || "Unknown Google Drive error";
+    try {
+      const parsed = JSON.parse(text) as { error?: { message?: string } };
+      return parsed.error?.message || text;
+    } catch {
+      return text;
+    }
+  };
+
   const tokenRes = await fetch("/.netlify/functions/get-drive-token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -258,7 +269,7 @@ const uploadFileToDrive = async (file: File, category: string): Promise<string> 
 
   const { token, folderId } = await tokenRes.json();
 
-  const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+  const initRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -273,7 +284,8 @@ const uploadFileToDrive = async (file: File, category: string): Promise<string> 
   });
 
   if (!initRes.ok) {
-    throw new Error(`Drive session init failed: ${initRes.statusText}`);
+    const detail = await readErrorMessage(initRes);
+    throw new Error(`Drive session init failed (${initRes.status}): ${detail}`);
   }
 
   const resumableUrl = initRes.headers.get("Location");
@@ -289,7 +301,8 @@ const uploadFileToDrive = async (file: File, category: string): Promise<string> 
   });
 
   if (!uploadRes.ok) {
-    throw new Error(`Drive upload failed: ${uploadRes.statusText}`);
+    const detail = await readErrorMessage(uploadRes);
+    throw new Error(`Drive upload failed (${uploadRes.status}): ${detail}`);
   }
 
   const driveFile = await uploadRes.json();

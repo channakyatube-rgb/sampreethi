@@ -283,3 +283,12 @@ using (
   bucket_id = 'gallery'
   and exists (select 1 from public.admin_users au where au.id = auth.uid())
 );
+
+-- Run this in your Supabase SQL Editor
+-- It adds the storage_provider column to both tables
+
+ALTER TABLE catalogues
+ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'supabase';
+
+ALTER TABLE gallery
+ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'supabase';

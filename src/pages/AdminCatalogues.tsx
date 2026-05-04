@@ -11,16 +11,47 @@ import {
   isSupabaseConfigured,
   listCatalogueCategories,
   listCatalogueItems,
+  StorageProvider,
   SUPABASE_CONFIG_ERROR,
   uploadCatalogueFiles,
 } from "@/lib/catalogues";
-import { Loader2, Lock, LogOut, Trash2, UploadCloud } from "lucide-react";
+import { Cloud, HardDrive, Loader2, Lock, LogOut, Server, Trash2, UploadCloud } from "lucide-react";
 
 const ADD_NEW_CATEGORY_VALUE = "__new_category__";
+
+const STORAGE_OPTIONS: {
+  value: StorageProvider;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+}[] = [
+  {
+    value: "supabase",
+    label: "Supabase",
+    description: "Best for small files under 50 MB",
+    icon: <Server size={14} />,
+    color: "border-green-400 bg-green-50 text-green-700",
+  },
+  {
+    value: "r2",
+    label: "Cloudflare R2",
+    description: "Best for large files — no size limit",
+    icon: <Cloud size={14} />,
+    color: "border-orange-400 bg-orange-50 text-orange-700",
+  },
+  {
+    value: "drive",
+    label: "Google Drive",
+    description: "15 GB free — great for large catalogues",
+    icon: <HardDrive size={14} />,
+    color: "border-blue-400 bg-blue-50 text-blue-700",
+  },
+];
+
 const mergeCategoryOptions = (...groups: string[][]) => {
   const seen = new Set<string>();
   const ordered: string[] = [];
-
   for (const group of groups) {
     for (const rawCategory of group) {
       const normalized = rawCategory.trim();
@@ -29,11 +60,11 @@ const mergeCategoryOptions = (...groups: string[][]) => {
       ordered.push(normalized);
     }
   }
-
   return ordered;
 };
 
-const getDefaultCategory = (categories: string[]) => categories.find((catalogueCategory) => catalogueCategory !== "Other") ?? categories[0] ?? "Other";
+const getDefaultCategory = (categories: string[]) =>
+  categories.find((c) => c !== "Other") ?? categories[0] ?? "Other";
 
 const AdminCatalogues = () => {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -45,22 +76,39 @@ const AdminCatalogues = () => {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [categoryOptions, setCategoryOptions] = useState<string[]>(() => mergeCategoryOptions(CATALOGUE_CATEGORIES));
-  const [category, setCategory] = useState<string>(() => getDefaultCategory(mergeCategoryOptions(CATALOGUE_CATEGORIES)));
+  const [categoryOptions, setCategoryOptions] = useState<string[]>(() =>
+    mergeCategoryOptions(CATALOGUE_CATEGORIES)
+  );
+  const [category, setCategory] = useState<string>(() =>
+    getDefaultCategory(mergeCategoryOptions(CATALOGUE_CATEGORIES))
+  );
   const [customCategory, setCustomCategory] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [storageProvider, setStorageProvider] = useState<StorageProvider>("r2");
 
   const loadItems = async () => {
     setIsLoadingItems(true);
     setActionError("");
     try {
-      const [data, savedCategories] = await Promise.all([listCatalogueItems(), listCatalogueCategories()]);
+      const [data, savedCategories] = await Promise.all([
+        listCatalogueItems(),
+        listCatalogueCategories(),
+      ]);
       setItems(data);
-      setCategoryOptions(mergeCategoryOptions(CATALOGUE_CATEGORIES, savedCategories, data.map((item) => item.category)));
+      setCategoryOptions(
+        mergeCategoryOptions(
+          CATALOGUE_CATEGORIES,
+          savedCategories,
+          data.map((item) => item.category)
+        )
+      );
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Could not load catalogue items.");
+      setActionError(
+        error instanceof Error ? error.message : "Could not load catalogue items."
+      );
     } finally {
       setIsLoadingItems(false);
     }
@@ -77,14 +125,11 @@ const AdminCatalogues = () => {
       try {
         const session = await getAdminSession();
         setIsAuthed(session);
-        if (session) {
-          await loadItems();
-        }
+        if (session) await loadItems();
       } finally {
         setIsCheckingSession(false);
       }
     };
-
     void checkSession();
   }, []);
 
@@ -105,34 +150,41 @@ const AdminCatalogues = () => {
   };
 
   const handleFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files ?? []);
-    setFiles(selectedFiles);
+    setFiles(Array.from(event.target.files ?? []));
   };
 
   const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setActionError("");
     setUploading(true);
+
+    const providerLabel =
+      STORAGE_OPTIONS.find((o) => o.value === storageProvider)?.label ?? storageProvider;
+    setUploadProgress(`Uploading to ${providerLabel}...`);
+
     try {
-      const resolvedCategory = category === ADD_NEW_CATEGORY_VALUE ? customCategory.trim() : category.trim();
-      if (!resolvedCategory) {
-        throw new Error("Please enter a new category name.");
-      }
+      const resolvedCategory =
+        category === ADD_NEW_CATEGORY_VALUE ? customCategory.trim() : category.trim();
+      if (!resolvedCategory) throw new Error("Please enter a new category name.");
 
       await uploadCatalogueFiles({
         title: title.trim(),
         description: description.trim(),
         category: resolvedCategory,
         files,
+        storageProvider,
       });
+
       setTitle("");
       setDescription("");
       setCategory(getDefaultCategory(categoryOptions));
       setCustomCategory("");
       setFiles([]);
+      setUploadProgress("");
       await loadItems();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Upload failed.");
+      setUploadProgress("");
     } finally {
       setUploading(false);
     }
@@ -156,6 +208,19 @@ const AdminCatalogues = () => {
     setItems([]);
     setLoginEmail("");
     setLoginPassword("");
+  };
+
+  const getProviderBadge = (provider: StorageProvider) => {
+    const opt = STORAGE_OPTIONS.find((o) => o.value === provider);
+    if (!opt) return null;
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${opt.color}`}
+      >
+        {opt.icon}
+        {opt.label}
+      </span>
+    );
   };
 
   if (isCheckingSession) {
@@ -187,7 +252,7 @@ const AdminCatalogues = () => {
             >
               Admin Gallery
             </Link>
-            {isAuthed ? (
+            {isAuthed && (
               <button
                 type="button"
                 onClick={handleLogout}
@@ -196,7 +261,7 @@ const AdminCatalogues = () => {
                 <LogOut size={16} />
                 Logout
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </header>
@@ -211,18 +276,18 @@ const AdminCatalogues = () => {
             <p className="text-sm text-muted-foreground mb-5">
               Only admin users can upload or manage catalogue files.
             </p>
-            {!isSupabaseConfigured ? (
+            {!isSupabaseConfigured && (
               <div className="text-xs rounded-md border border-accent/40 bg-accent/10 p-3 mb-4 text-foreground/80">
                 {SUPABASE_CONFIG_ERROR}
               </div>
-            ) : null}
+            )}
             <form className="space-y-3" onSubmit={handleLogin}>
               <input
                 type="email"
                 required
                 placeholder="Admin email"
                 value={loginEmail}
-                onChange={(event) => setLoginEmail(event.target.value)}
+                onChange={(e) => setLoginEmail(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <input
@@ -230,7 +295,7 @@ const AdminCatalogues = () => {
                 required
                 placeholder="Password"
                 value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
+                onChange={(e) => setLoginPassword(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <button
@@ -241,52 +306,83 @@ const AdminCatalogues = () => {
                 {loginLoading ? "Signing in..." : "Sign In"}
               </button>
             </form>
-            {actionError ? <p className="mt-3 text-sm text-destructive">{actionError}</p> : null}
+            {actionError && <p className="mt-3 text-sm text-destructive">{actionError}</p>}
           </div>
         ) : (
-          <div className="grid xl:grid-cols-[380px,1fr] gap-6">
+          <div className="grid xl:grid-cols-[400px,1fr] gap-6">
+            {/* Upload Form */}
             <div className="rounded-2xl border border-border bg-card p-6 h-fit">
               <div className="flex items-center gap-2 text-primary mb-4">
                 <UploadCloud size={18} />
                 <h2 className="font-heading text-xl font-semibold">Upload New Catalogue</h2>
               </div>
+
               <form className="space-y-3" onSubmit={handleUpload}>
+                {/* Storage Provider Selector */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                    Storage Provider
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {STORAGE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          setStorageProvider(opt.value);
+                          setActionError("");
+                          setUploadProgress("");
+                        }}
+                        className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg border-2 text-xs font-semibold transition-all ${
+                          storageProvider === opt.value
+                            ? opt.color + " border-current"
+                            : "border-border text-muted-foreground hover:border-accent/40"
+                        }`}
+                      >
+                        {opt.icon}
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    {STORAGE_OPTIONS.find((o) => o.value === storageProvider)?.description}
+                  </p>
+                </div>
+
                 <input
                   type="text"
                   placeholder="Title (optional, defaults to file name)"
                   value={title}
-                  onChange={(event) => setTitle(event.target.value)}
+                  onChange={(e) => setTitle(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <textarea
                   placeholder="Short description"
                   rows={3}
                   value={description}
-                  onChange={(event) => setDescription(event.target.value)}
+                  onChange={(e) => setDescription(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                 />
                 <select
                   value={category}
-                  onChange={(event) => setCategory(event.target.value)}
+                  onChange={(e) => setCategory(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 >
-                  {categoryOptions.map((catalogueCategory) => (
-                    <option key={catalogueCategory} value={catalogueCategory}>
-                      {catalogueCategory}
-                    </option>
+                  {categoryOptions.map((c) => (
+                    <option key={c} value={c}>{c}</option>
                   ))}
                   <option value={ADD_NEW_CATEGORY_VALUE}>Add New Category...</option>
                 </select>
-                {category === ADD_NEW_CATEGORY_VALUE ? (
+                {category === ADD_NEW_CATEGORY_VALUE && (
                   <input
                     type="text"
                     required
                     placeholder="Enter new category name"
                     value={customCategory}
-                    onChange={(event) => setCustomCategory(event.target.value)}
+                    onChange={(e) => setCustomCategory(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                   />
-                ) : null}
+                )}
                 <input
                   type="file"
                   multiple
@@ -299,15 +395,26 @@ const AdminCatalogues = () => {
                   disabled={uploading || files.length === 0}
                   className="w-full rounded-md bg-accent text-accent-foreground py-2.5 text-sm font-semibold hover:bg-accent/90 disabled:opacity-60 transition-colors"
                 >
-                  {uploading ? "Uploading..." : "Upload Files"}
+                  {uploading ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      {uploadProgress || "Uploading..."}
+                    </span>
+                  ) : (
+                    "Upload Files"
+                  )}
                 </button>
               </form>
+
               <p className="text-xs text-muted-foreground mt-3">
-                Supports PDF, images and office documents. Users can browse all uploaded files in the Catalogues page.
+                Supports PDF, images and office documents. Use R2 or Google Drive for files over 50 MB.
               </p>
-              {actionError ? <p className="mt-2 text-sm text-destructive">{actionError}</p> : null}
+              {actionError && (
+                <p className="mt-2 text-sm text-destructive">{actionError}</p>
+              )}
             </div>
 
+            {/* Uploaded Files List */}
             <div className="rounded-2xl border border-border bg-card p-6">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h2 className="font-heading text-xl font-semibold">Uploaded Files</h2>
@@ -328,13 +435,19 @@ const AdminCatalogues = () => {
               ) : (
                 <div className="space-y-2">
                   {items.map((item) => (
-                    <div key={item.id} className="rounded-lg border border-border p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-foreground">{item.title}</p>
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-border p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">{item.title}</p>
                         <p className="text-xs text-muted-foreground">{item.category}</p>
-                        <p className="text-xs text-muted-foreground">{item.fileName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.fileName}</p>
+                        <div className="mt-1">
+                          {getProviderBadge(item.storageProvider)}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <a
                           href={item.fileUrl}
                           target="_blank"

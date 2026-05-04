@@ -176,10 +176,10 @@ const AdminCatalogues = () => {
           </Link>
           <div className="flex items-center gap-3">
             <Link
-              to="/catalogues"
+              to="/admin/catalogues"
               className="px-4 py-2 text-sm font-semibold rounded-md border border-border hover:border-accent/50 hover:text-accent transition-colors"
             >
-              Catalogues
+              Admin Catalogue
             </Link>
             <Link
               to="/admin/gallery"

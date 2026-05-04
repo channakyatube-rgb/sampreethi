@@ -174,16 +174,16 @@ const AdminGallery = () => {
           </Link>
           <div className="flex items-center gap-3">
             <Link
-              to="/catalogues"
-              className="px-4 py-2 text-sm font-semibold rounded-md border border-border hover:border-accent/50 hover:text-accent transition-colors"
-            >
-              Catalogues
-            </Link>
-            <Link
               to="/admin/catalogues"
               className="px-4 py-2 text-sm font-semibold rounded-md border border-border hover:border-accent/50 hover:text-accent transition-colors"
             >
-              Admin Catalogues
+              Admin Catalogue
+            </Link>
+            <Link
+              to="/admin/gallery"
+              className="px-4 py-2 text-sm font-semibold rounded-md border border-border hover:border-accent/50 hover:text-accent transition-colors"
+            >
+              Admin Gallery
             </Link>
             {isAuthed ? (
               <button

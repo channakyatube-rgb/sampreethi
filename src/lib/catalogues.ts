@@ -43,11 +43,16 @@ export interface UploadPayload {
   files: File[];
 }
 
+const resolveEnvValue = (value: string | undefined, fallback: string) => {
+  const normalizedValue = value?.trim();
+  return normalizedValue && normalizedValue.length > 0 ? normalizedValue : fallback;
+};
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const CATALOGUE_BUCKET = import.meta.env.VITE_SUPABASE_CATALOGUE_BUCKET ?? "catalogues";
-const CATALOGUE_TABLE = import.meta.env.VITE_SUPABASE_CATALOGUE_TABLE ?? "catalogue_files";
-const CATALOGUE_CATEGORIES_TABLE = import.meta.env.VITE_SUPABASE_CATALOGUE_CATEGORIES_TABLE ?? "catalogue_categories";
+const CATALOGUE_BUCKET = resolveEnvValue(import.meta.env.VITE_SUPABASE_CATALOGUE_BUCKET, "catalogues");
+const CATALOGUE_TABLE = resolveEnvValue(import.meta.env.VITE_SUPABASE_CATALOGUE_TABLE, "catalogue_files");
+const CATALOGUE_CATEGORIES_TABLE = resolveEnvValue(import.meta.env.VITE_SUPABASE_CATALOGUE_CATEGORIES_TABLE, "catalogue_categories");
 const ADMIN_USERS_TABLE = "admin_users";
 const configuredAdminEmails = (import.meta.env.VITE_ADMIN_EMAILS ?? "")
   .split(",")
@@ -84,6 +89,7 @@ const ADMIN_ROW_MISSING_ERROR =
   "Admin access is not enabled for this account in Supabase. Add this user ID to public.admin_users and sign in again:";
 const ADMIN_SESSION_MISSING_ERROR = "Admin session expired. Please sign in again.";
 const ADMIN_RLS_ERROR = "new row violates row-level security policy";
+const STORAGE_BUCKET_NOT_FOUND_ERROR = "bucket not found";
 const SQL_TABLE_MISSING_ERROR_CODE = "42P01";
 
 export const isSupabaseConfigured = Boolean(supabase);
@@ -134,6 +140,14 @@ const formatAdminAuthError = (message: string, userId: string) => {
   const normalizedMessage = message.toLowerCase();
   if (normalizedMessage.includes(ADMIN_RLS_ERROR)) {
     return `${ADMIN_ROW_MISSING_ERROR} ${userId}`;
+  }
+  return message;
+};
+
+const formatStorageError = (message: string) => {
+  const normalizedMessage = message.toLowerCase();
+  if (normalizedMessage.includes(STORAGE_BUCKET_NOT_FOUND_ERROR)) {
+    return `Storage bucket "${CATALOGUE_BUCKET}" was not found. Create this bucket in Supabase Storage or update VITE_SUPABASE_CATALOGUE_BUCKET to match the existing bucket id.`;
   }
   return message;
 };
@@ -273,7 +287,7 @@ export const uploadCatalogueFiles = async (payload: UploadPayload) => {
     const { error: uploadError } = await client.storage.from(CATALOGUE_BUCKET).upload(filePath, file, {
       upsert: false,
     });
-    if (uploadError) throw new Error(formatAdminAuthError(uploadError.message, adminUser.id));
+    if (uploadError) throw new Error(formatAdminAuthError(formatStorageError(uploadError.message), adminUser.id));
 
     const { data: publicData } = client.storage.from(CATALOGUE_BUCKET).getPublicUrl(filePath);
     const fileUrl = publicData.publicUrl;
@@ -304,7 +318,7 @@ export const deleteCatalogueItem = async (item: CatalogueItem) => {
   const adminUser = await ensureAdminUser(client);
   if (item.filePath) {
     const { error: storageError } = await client.storage.from(CATALOGUE_BUCKET).remove([item.filePath]);
-    if (storageError) throw new Error(formatAdminAuthError(storageError.message, adminUser.id));
+    if (storageError) throw new Error(formatAdminAuthError(formatStorageError(storageError.message), adminUser.id));
   }
 
   const { error: deleteError } = await client.from(CATALOGUE_TABLE).delete().eq("id", item.id);

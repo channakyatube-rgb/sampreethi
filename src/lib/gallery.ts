@@ -41,9 +41,15 @@ export interface GalleryUploadPayload {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const GALLERY_BUCKET = import.meta.env.VITE_SUPABASE_GALLERY_BUCKET ?? "gallery";
-const GALLERY_TABLE = import.meta.env.VITE_SUPABASE_GALLERY_TABLE ?? "gallery_images";
-const GALLERY_CATEGORIES_TABLE = import.meta.env.VITE_SUPABASE_GALLERY_CATEGORIES_TABLE ?? "gallery_categories";
+const resolveEnvValue = (value: string | undefined, fallback: string) => {
+  const normalizedValue = value?.trim();
+  return normalizedValue && normalizedValue.length > 0 ? normalizedValue : fallback;
+};
+
+const GALLERY_BUCKET = resolveEnvValue(import.meta.env.VITE_SUPABASE_GALLERY_BUCKET, "gallery");
+const GALLERY_TABLE = resolveEnvValue(import.meta.env.VITE_SUPABASE_GALLERY_TABLE, "gallery_images");
+const GALLERY_CATEGORIES_TABLE = resolveEnvValue(import.meta.env.VITE_SUPABASE_GALLERY_CATEGORIES_TABLE, "gallery_categories");
+const STORAGE_BUCKET_NOT_FOUND_ERROR = "bucket not found";
 const SQL_TABLE_MISSING_ERROR_CODE = "42P01";
 
 export const GALLERY_CATEGORIES: GalleryCategory[] = [
@@ -104,6 +110,14 @@ const sanitizeCategoryFolder = (category: string) =>
     .replace(/[^a-z0-9\-_]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "") || "other";
+
+const formatStorageError = (message: string) => {
+  const normalizedMessage = message.toLowerCase();
+  if (normalizedMessage.includes(STORAGE_BUCKET_NOT_FOUND_ERROR)) {
+    return `Storage bucket "${GALLERY_BUCKET}" was not found. Create this bucket in Supabase Storage or update VITE_SUPABASE_GALLERY_BUCKET to match the existing bucket id.`;
+  }
+  return message;
+};
 
 const mapSupabaseRow = (row: SupabaseGalleryRow): GalleryItem => ({
   id: row.id,
@@ -180,7 +194,7 @@ export const uploadGalleryImages = async (payload: GalleryUploadPayload) => {
     const { error: uploadError } = await client.storage.from(GALLERY_BUCKET).upload(filePath, file, {
       upsert: false,
     });
-    if (uploadError) throw new Error(uploadError.message);
+    if (uploadError) throw new Error(formatStorageError(uploadError.message));
 
     const { data: publicData } = client.storage.from(GALLERY_BUCKET).getPublicUrl(filePath);
 
@@ -208,7 +222,7 @@ export const deleteGalleryItem = async (item: GalleryItem) => {
   const client = getSupabase();
   if (item.imagePath) {
     const { error: storageError } = await client.storage.from(GALLERY_BUCKET).remove([item.imagePath]);
-    if (storageError) throw new Error(storageError.message);
+    if (storageError) throw new Error(formatStorageError(storageError.message));
   }
 
   const { error: deleteError } = await client.from(GALLERY_TABLE).delete().eq("id", item.id);

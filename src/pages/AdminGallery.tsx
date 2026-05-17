@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.svg";
 import { adminLogin, adminLogout, getAdminSession, isSupabaseConfigured, SUPABASE_CONFIG_ERROR } from "@/lib/catalogues";
 import {
   deleteGalleryItem,

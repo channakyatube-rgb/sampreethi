@@ -160,9 +160,9 @@ const GallerySection = () => {
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-primary/85 via-primary/25 to-transparent p-4 flex flex-col justify-end">
-                  <h3 className="text-primary-foreground font-heading font-semibold text-lg">{project.title}</h3>
-                  <p className="text-primary-foreground/80 text-sm">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent p-4 flex flex-col justify-end">
+                  <h3 className="text-white font-heading font-semibold text-lg">{project.title}</h3>
+                  <p className="text-white/80 text-sm">
                     {project.category}
                     {active === "All" ? ` | ${categoryCounts[project.category] ?? 1} images` : ""}
                   </p>

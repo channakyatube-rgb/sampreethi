@@ -59,11 +59,11 @@ const GALLERY_CATEGORIES_TABLE = resolveEnvValue(import.meta.env.VITE_SUPABASE_G
 const supabase =
   SUPABASE_URL && SUPABASE_ANON_KEY
     ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      })
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
     : null;
 
 export const isGallerySupabaseConfigured = Boolean(supabase);
